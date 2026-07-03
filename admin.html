@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 - 成绩上传</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#1a1a2e;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.container{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.4);padding:40px;max-width:600px;width:100%}
+h1{text-align:center;color:#333;font-size:22px;margin-bottom:4px}
+.subtitle{text-align:center;color:#999;font-size:13px;margin-bottom:24px}
+.step{display:none}
+.step.active{display:block}
+
+.form-group{margin-bottom:16px}
+label{display:block;color:#555;font-size:14px;margin-bottom:6px;font-weight:500}
+input,textarea{width:100%;padding:12px 14px;border:2px solid #e0e0e0;border-radius:10px;font-size:14px;outline:none;transition:border-color .3s;font-family:monospace}
+input:focus,textarea:focus{border-color:#667eea}
+
+.upload-zone{border:3px dashed #ccc;border-radius:16px;padding:40px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:16px}
+.upload-zone:hover,.upload-zone.dragover{border-color:#667eea;background:#f0f0ff}
+.upload-zone .icon{font-size:48px;margin-bottom:12px}
+.upload-zone .text{color:#888;font-size:14px}
+.upload-zone .hint{color:#bbb;font-size:12px;margin-top:8px}
+
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:transform .2s;margin-top:8px}
+.btn:hover{transform:translateY(-2px)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn.danger{background:linear-gradient(135deg,#e74c3c 0%,#c0392b 100%)}
+
+.preview{margin-top:16px}
+.preview table{width:100%;border-collapse:collapse;font-size:12px}
+.preview th{background:#f0f0ff;padding:8px 6px;text-align:left;border:1px solid #e0e0e0;position:sticky;top:0}
+.preview td{padding:6px;border:1px solid #f0f0f0}
+.preview .wrap{max-height:300px;overflow:auto;border:1px solid #e0e0e0;border-radius:8px}
+
+.status{padding:14px;border-radius:12px;text-align:center;margin-top:16px;display:none;font-size:14px}
+.status.success{display:block;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7}
+.status.error{display:block;background:#fff0f0;color:#c00;border:1px solid #fcc}
+.status.info{display:block;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9}
+
+.info-box{background:#fffde7;border:1px solid #fff9c4;border-radius:10px;padding:14px;margin-bottom:20px;font-size:13px;color:#666}
+.info-box code{background:#f5f5f5;padding:2px 6px;border-radius:4px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🔐 成绩管理后台</h1>
+<p class="subtitle">清苑三小 · 四年级四班</p>
+
+<!-- Step 1: 认证 -->
+<div class="step active" id="step-auth">
+  <div class="info-box">
+    需要 GitHub Token 来更新成绩数据。<br>
+    获取方式：<code>github.com/settings/tokens</code> → Generate new token (classic) → 勾选 <code>public_repo</code>
+  </div>
+  <div class="form-group">
+    <label>GitHub Token</label>
+    <input type="password" id="tokenInput" placeholder="ghp_xxxxxxxxxxxx">
+  </div>
+  <button class="btn" onclick="auth()">验 证</button>
+  <div class="status" id="authStatus"></div>
+</div>
+
+<!-- Step 2: 上传 -->
+<div class="step" id="step-upload">
+  <div class="info-box">当前数据：<span id="currentDataInfo">加载中...</span></div>
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="icon">📁</div>
+    <div class="text">点击上传 Excel 成绩表 (.xls / .xlsx)</div>
+    <div class="hint">支持 WPS/Office 导出格式</div>
+  </div>
+  <input type="file" id="fileInput" accept=".xls,.xlsx" style="display:none" onchange="handleFile(event)">
+
+  <div class="preview" id="previewBox" style="display:none">
+    <h4 style="margin-bottom:8px;color:#555">📋 解析预览（前5行）</h4>
+    <div class="wrap"><table><thead id="previewHead"></thead><tbody id="previewBody"></tbody></table></div>
+    <p style="font-size:12px;color:#888;margin-top:4px" id="previewCount"></p>
+  </div>
+
+  <button class="btn" id="uploadBtn" onclick="deploy()" disabled>🚀 更新成绩数据</button>
+  <div class="status" id="uploadStatus"></div>
+</div>
+
+<p style="text-align:center;color:#bbb;font-size:12px;margin-top:24px">
+  <a href="/" style="color:#667eea">← 返回查分页面</a>
+</p>
+</div>
+
+<script>
+const REPO_OWNER = 'hanhanning30-blip';
+const REPO_NAME = 'chafen';
+let token = '';
+let parsedData = null;
+let currentSha = null;
+
+// 拖拽上传
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  handleFile({target:{files:e.dataTransfer.files}});
+});
+
+async function auth() {
+  token = document.getElementById('tokenInput').value.trim();
+  const s = document.getElementById('authStatus');
+  if (!token) { s.className='status error'; s.textContent='请输入Token'; return; }
+
+  s.className='status info'; s.textContent='验证中...';
+
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}`, {
+      headers: {'Authorization': `token ${token}`}
+    });
+    if (resp.ok) {
+      s.className='status success'; s.textContent='✅ 验证成功';
+      document.getElementById('step-auth').classList.remove('active');
+      document.getElementById('step-upload').classList.add('active');
+      loadCurrentData();
+    } else {
+      s.className='status error'; s.textContent='❌ Token无效或权限不足';
+      token = '';
+    }
+  } catch(e) {
+    s.className='status error'; s.textContent='网络错误: ' + e.message;
+  }
+}
+
+async function loadCurrentData() {
+  try {
+    const resp = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/data.json`, {
+      headers: {'Authorization': `token ${token}`}
+    });
+    if (resp.ok) {
+      const d = await resp.json();
+      currentSha = d.sha;
+      const data = JSON.parse(atob(d.content));
+      document.getElementById('currentDataInfo').textContent = `${data.length} 条记录`;
+    } else {
+      document.getElementById('currentDataInfo').textContent = '暂无数据';
+    }
+  } catch(e) {
+    document.getElementById('currentDataInfo').textContent = '加载失败';
+  }
+}
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+
+      // 解析：跳过前两行（标题+表头），第3行开始是数据
+      // 列: 年级, 班次, 考号, 姓名, 语文, 数学, 英语, 科学, 总分, 排名
+      parsedData = [];
+      for (let i = 2; i < rows.length; i++) {
+        const r = rows[i];
+        if (!r || !r[3]) continue;
+        parsedData.push({
+          exam_id: String(r[2] || ''),
+          name: String(r[3] || ''),
+          chinese: parseFloat(r[4]) || 0,
+          math: parseFloat(r[5]) || 0,
+          english: parseFloat(r[6]) || 0,
+          science: parseFloat(r[7]) || 0,
+          total: parseFloat(r[8]) || 0,
+          rank: parseInt(r[9]) || 0
+        });
+      }
+
+      // 预览
+      const head = document.getElementById('previewHead');
+      const body = document.getElementById('previewBody');
+      head.innerHTML = '<tr><th>考号</th><th>姓名</th><th>语文</th><th>数学</th><th>英语</th><th>科学</th><th>总分</th><th>排名</th></tr>';
+      body.innerHTML = parsedData.slice(0,5).map(s =>
+        `<tr><td>${s.exam_id}</td><td>${s.name}</td><td>${s.chinese}</td><td>${s.math}</td><td>${s.english}</td><td>${s.science}</td><td>${s.total}</td><td>${s.rank}</td></tr>`
+      ).join('');
+
+      document.getElementById('previewBox').style.display = 'block';
+      document.getElementById('previewCount').textContent = `共解析 ${parsedData.length} 条记录`;
+      document.getElementById('uploadBtn').disabled = false;
+    } catch(err) {
+      showStatus('uploadStatus', '解析失败: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function deploy() {
+  if (!parsedData || parsedData.length === 0) {
+    showStatus('uploadStatus', '请先上传文件', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.textContent = '更新中...';
+  showStatus('uploadStatus', '正在更新数据...', 'info');
+
+  try {
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(parsedData, null, 2))));
+    const body = {
+      message: '更新成绩数据',
+      content: content,
+      branch: 'main'
+    };
+    if (currentSha) body.sha = currentSha;
+
+    const resp = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/data.json`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (resp.ok) {
+      showStatus('uploadStatus', `✅ 更新成功！${parsedData.length} 条成绩已发布。1-2分钟后家长页面自动刷新。`, 'success');
+      loadCurrentData();
+    } else {
+      const e = await resp.json();
+      showStatus('uploadStatus', '❌ 更新失败: ' + (e.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    showStatus('uploadStatus', '网络错误: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 更新成绩数据';
+  }
+}
+
+function showStatus(id, msg, cls) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = 'status ' + cls;
+}
+</script>
+</body>
+</html>

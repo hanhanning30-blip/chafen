@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>清苑三小 四年级四班 期末成绩查询</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.container{background:#fff;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,0.3);padding:40px;max-width:480px;width:100%}
+h1{text-align:center;color:#333;font-size:24px;margin-bottom:4px}
+.subtitle{text-align:center;color:#999;font-size:14px;margin-bottom:28px}
+.form-group{margin-bottom:18px}
+label{display:block;color:#555;font-size:14px;margin-bottom:6px;font-weight:500}
+input{width:100%;padding:14px 16px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;transition:border-color .3s;outline:none}
+input:focus{border-color:#667eea}
+.btn{width:100%;padding:16px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;border:none;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;transition:transform .2s,box-shadow .2s;margin-top:8px}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(102,126,234,0.4)}
+.result{display:none;margin-top:28px}
+.result.show{display:block}
+.score-card{background:linear-gradient(135deg,#f5f7fa 0%,#c3cfe2 100%);border-radius:16px;padding:24px;text-align:center;margin-bottom:16px}
+.student-name{font-size:22px;font-weight:700;color:#333;margin-bottom:2px}
+.student-id{font-size:13px;color:#888;margin-bottom:16px}
+.total-score{font-size:48px;font-weight:800;color:#667eea;line-height:1;margin-bottom:4px}
+.total-label{font-size:13px;color:#888;margin-bottom:8px}
+.rank-badge{display:inline-block;background:#667eea;color:#fff;padding:4px 16px;border-radius:20px;font-size:14px;font-weight:600}
+.subjects{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.subject{background:#f8f9ff;border-radius:12px;padding:16px;text-align:center;border:1px solid #e8eaff}
+.subject-name{font-size:13px;color:#888;margin-bottom:6px}
+.subject-score{font-size:28px;font-weight:700;color:#333}
+.subject-score.perfect{color:#4caf50}
+.error{display:none;background:#fff0f0;border:1px solid #fcc;color:#c00;padding:14px;border-radius:12px;text-align:center;margin-top:16px;font-size:14px}
+.error.show{display:block}
+.loading{text-align:center;color:#888;font-size:14px;margin-top:16px}
+.loading.hide{display:none}
+.footer{text-align:center;color:#bbb;font-size:12px;margin-top:24px}
+@media(max-width:480px){.container{padding:24px}.total-score{font-size:40px}}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>📝 期末成绩查询</h1>
+<p class="subtitle">清苑三小 · 四年级四班</p>
+<div class="form-group"><label>👤 学生姓名</label><input type="text" id="nameInput" placeholder="请输入学生姓名" autocomplete="off"></div>
+<div class="form-group"><label>🔢 学号（考号）</label><input type="text" id="idInput" placeholder="请输入学号" autocomplete="off"></div>
+<button class="btn" onclick="query()">查 询 成 绩</button>
+<div class="loading" id="loadingMsg">📡 加载成绩数据中...</div>
+<div class="error" id="errorMsg"></div>
+<div class="result" id="resultCard">
+<div class="score-card">
+<div class="student-name" id="sName"></div>
+<div class="student-id">考号：<span id="sId"></span></div>
+<div class="total-score" id="sTotal"></div>
+<div class="total-label">总分</div>
+
+</div>
+<div class="subjects">
+<div class="subject"><div class="subject-name">📖 语文</div><div class="subject-score" id="sChinese"></div></div>
+<div class="subject"><div class="subject-name">📐 数学</div><div class="subject-score" id="sMath"></div></div>
+<div class="subject"><div class="subject-name">🌍 英语</div><div class="subject-score" id="sEnglish"></div></div>
+<div class="subject"><div class="subject-name">🔬 科学</div><div class="subject-score" id="sScience"></div></div>
+</div>
+</div>
+<p class="footer">请输入姓名和学号，二者匹配才能查看成绩</p>
+</div>
+<script>
+var DATA=[],LOADED=!1;
+fetch('data.json').then(function(r){return r.json()}).then(function(d){DATA=d;LOADED=!0;document.getElementById('loadingMsg').classList.add('hide')}).catch(function(){document.getElementById('loadingMsg').textContent='⚠️ 数据加载失败，请刷新重试'});
+function query(){if(!LOADED){var e=document.getElementById('errorMsg');e.textContent='数据加载中，请稍候...';e.classList.add('show');return}var n=document.getElementById('nameInput').value.trim(),i=document.getElementById('idInput').value.trim(),e=document.getElementById('errorMsg'),r=document.getElementById('resultCard');e.classList.remove('show');r.classList.remove('show');if(!n||!i){e.textContent='请输入姓名和学号';e.classList.add('show');return}var s=DATA.find(function(t){return t.name===n&&t.exam_id===i});if(!s){e.textContent='姓名或学号不匹配，请核实后重试';e.classList.add('show');return}document.getElementById('sName').textContent=s.name;document.getElementById('sId').textContent=s.exam_id;document.getElementById('sTotal').textContent=s.total;['sChinese','sMath','sEnglish','sScience'].forEach(function(id,idx){var k=['chinese','math','english','science'],el=document.getElementById(id);el.textContent=s[k[idx]];el.classList.toggle('perfect',s[k[idx]]===100)});r.classList.add('show')}
+document.getElementById('idInput').addEventListener('keydown',function(e){if(e.key==='Enter')query()});
+document.getElementById('nameInput').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('idInput').focus()});
+</script>
+</body>
+</html>
